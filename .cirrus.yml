@@ -12,5 +12,6 @@ task:
     - pkg upgrade -y
     - pkg install -y gmake coreutils
   script: |
+    cc -dM -E - < /dev/null | grep STDC_VERSION
     MOREFLAGS="-Werror" gmake -j all
     gmake shortest
