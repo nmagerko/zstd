@@ -256,6 +256,18 @@ _match_stored:
         if (ip <= ilimit) {
             /* Complementary insertion */
             /* done after iLimit test, as candidates could be > iend-8 */
+#if 1
+            {   U32 const indexToInsert = current+2;
+                const BYTE* const ipToInsert2 = ip - 2;
+                const BYTE* const ipToInsert1 = ip - 1;
+                hashLong[ZSTD_hashPtr(base+indexToInsert, hBitsL, 8)] = indexToInsert;
+                hashLong[ZSTD_hashPtr(ipToInsert2, hBitsL, 8)] = (U32)(ipToInsert2-base);
+                hashLong[ZSTD_hashPtr(ipToInsert1, hBitsL, 8)] = (U32)(ipToInsert1-base);
+                hashSmall[ZSTD_hashPtr(base+indexToInsert, hBitsS, mls)] = indexToInsert;
+                hashSmall[ZSTD_hashPtr(ipToInsert1, hBitsS, mls)] = (U32)(ipToInsert1-base);
+                hashSmall[ZSTD_hashPtr(ipToInsert2, hBitsS, mls)] = (U32)(ipToInsert2-base);
+            }
+#else
             {   U32 const indexToInsert = current+2;
                 hashLong[ZSTD_hashPtr(base+indexToInsert, hBitsL, 8)] =
                     hashSmall[ZSTD_hashPtr(base+indexToInsert, hBitsS, mls)] =
@@ -271,7 +283,7 @@ _match_stored:
                     hashSmall[ZSTD_hashPtr(ipToInsert, hBitsS, mls)] =
                         (U32)(ipToInsert-base);
             }
-
+#endif
             /* check immediate repcode */
             if (dictMode == ZSTD_dictMatchState) {
                 while (ip <= ilimit) {
