@@ -304,6 +304,7 @@ struct FIO_prefs_s {
     int ldmMinMatch;
     int ldmBucketSizeLog;
     int ldmHashRateLog;
+    size_t hintedSrcSize;
     size_t targetCBlockSize;
     ZSTD_literalCompressionMode_e literalCompressionMode;
 
@@ -349,6 +350,7 @@ FIO_prefs_t* FIO_createPreferences(void)
     ret->ldmMinMatch = 0;
     ret->ldmBucketSizeLog = FIO_LDM_PARAM_NOTSET;
     ret->ldmHashRateLog = FIO_LDM_PARAM_NOTSET;
+    ret->hintedSrcSize = 0;
     ret->targetCBlockSize = 0;
     ret->literalCompressionMode = ZSTD_lcm_auto;
     return ret;
@@ -416,6 +418,10 @@ void FIO_setRsyncable(FIO_prefs_t* const prefs, int rsyncable) {
     if ((rsyncable>0) && (prefs->nbWorkers==0))
         EXM_THROW(1, "Rsyncable mode is not compatible with single thread mode \n");
     prefs->rsyncable = rsyncable;
+}
+
+void FIO_setHintedSrcSize(FIO_prefs_t* const prefs, size_t hintedSrcSize) {
+    prefs->hintedSrcSize = hintedSrcSize;
 }
 
 void FIO_setTargetCBlockSize(FIO_prefs_t* const prefs, size_t targetCBlockSize) {
@@ -698,9 +704,20 @@ static cRess_t FIO_createCResources(FIO_prefs_t* const prefs,
         CHECK( ZSTD_CCtx_setParameter(ress.cctx, ZSTD_c_rsyncable, prefs->rsyncable) );
 #endif
         /* dictionary */
-        CHECK( ZSTD_CCtx_setPledgedSrcSize(ress.cctx, srcSize) );  /* set the value temporarily for dictionary loading, to adapt compression parameters */
+        /* set the pledged size for dictionary loading, to adapt compression parameters */
+        if (srcSize == ZSTD_CONTENTSIZE_UNKNOWN && prefs->hintedSrcSize > 0) {
+          /* unknown source size; use the size hint and disable writing this size to frame during compression */
+          CHECK( ZSTD_CCtx_setPledgedSrcSize(ress.cctx, prefs->hintedSrcSize) );
+          CHECK( ZSTD_CCtx_setParameter(ress.cctx, ZSTD_c_contentSizeFlag, 0) );
+        } else {
+          /* use the known source size for adaption */
+          CHECK( ZSTD_CCtx_setPledgedSrcSize(ress.cctx, srcSize) );
+        }
         CHECK( ZSTD_CCtx_loadDictionary(ress.cctx, dictBuffer, dictBuffSize) );
-        CHECK( ZSTD_CCtx_setPledgedSrcSize(ress.cctx, ZSTD_CONTENTSIZE_UNKNOWN) );  /* reset */
+        if (srcSize != ZSTD_CONTENTSIZE_UNKNOWN || prefs->hintedSrcSize == 0) {
+            /* reset pledge when src size is known or no hint given */
+            CHECK( ZSTD_CCtx_setPledgedSrcSize(ress.cctx, ZSTD_CONTENTSIZE_UNKNOWN) );
+        }
 
         free(dictBuffer);
     }
